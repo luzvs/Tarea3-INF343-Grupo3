@@ -19,6 +19,7 @@ Se uso Rest
 ya main, server, cliente y estado, deberian estar listos los probe localmente, intrucciones solo tiene codigo para que compile no implementa nada real. Si agregan funciones adicionales o otras cosas verifiquen si deben agregar en alguno de los archivos que trabaje, como no hay logica detras no hacen nada mas que mostrar que esta conectado, no he subido nada a las mv porque no tiene sentido todavia:
 
 lo que probe:
+```cmd
 cd expendedora
 
 go mod init expendedora
@@ -76,3 +77,4 @@ curl localhost:8101/estado
 respuesta:
 pong
 {"inventario":[{"nombre":"manzana","cantidad":100},{"nombre":"naranja","cantidad":10}],"malicioso":false,"vetos":{}}
+```
