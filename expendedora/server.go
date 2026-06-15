@@ -14,6 +14,7 @@ type Servidor struct {
 	mux    *http.ServeMux
 }
 
+// NuevoServidor crea un servidor HTTP asociado al estado del proceso.
 func NuevoServidor(puerto string, estado *Estado) *Servidor {
 	s := &Servidor{
 		puerto: puerto,
@@ -26,6 +27,7 @@ func NuevoServidor(puerto string, estado *Estado) *Servidor {
 	return s
 }
 
+// Iniciar deja el servidor escuchando en el puerto configurado.
 func (s *Servidor) Iniciar() error {
 	log.Printf(
 		"[M%dP%d] Escuchando en puerto %s",
@@ -37,6 +39,7 @@ func (s *Servidor) Iniciar() error {
 	return http.ListenAndServe(":"+s.puerto, s.mux)
 }
 
+// registrarRutas asocia los endpoints REST con sus handlers.
 func (s *Servidor) registrarRutas() {
 
 	s.mux.HandleFunc("/ping", s.handlePing)
@@ -48,16 +51,26 @@ func (s *Servidor) registrarRutas() {
 	s.mux.HandleFunc("/estado", s.handleEstado)
 
 	s.mux.HandleFunc("/infectar", s.handleInfectar)
+
+	s.mux.HandleFunc("/snapshot", s.handleSnapshot)
 }
 
+// handlePing responde disponibilidad basica del proceso.
 func (s *Servidor) handlePing(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	log.Printf(
+		"[M%dP%d] Recibido /ping desde %s",
+		s.estado.NumMaquina,
+		s.estado.IdProceso,
+		r.RemoteAddr,
+	)
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintln(w, "pong")
 }
 
+// handleInventario recibe una replica de inventario desde otro proceso.
 func (s *Servidor) handleInventario(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -96,6 +109,14 @@ func (s *Servidor) handleInventario(
 		return
 	}
 
+	log.Printf(
+		"[M%dP%d] Recibido inventario desde %s: %v",
+		s.estado.NumMaquina,
+		s.estado.IdProceso,
+		r.RemoteAddr,
+		items,
+	)
+
 	s.estado.SetInventario(items)
 
 	log.Printf(
@@ -107,6 +128,7 @@ func (s *Servidor) handleInventario(
 	w.WriteHeader(http.StatusOK)
 }
 
+// handleVetos recibe una replica de la lista de vetos.
 func (s *Servidor) handleVetos(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -145,6 +167,14 @@ func (s *Servidor) handleVetos(
 		return
 	}
 
+	log.Printf(
+		"[M%dP%d] Recibidos vetos desde %s: %v",
+		s.estado.NumMaquina,
+		s.estado.IdProceso,
+		r.RemoteAddr,
+		vetos,
+	)
+
 	s.estado.SetVetos(vetos)
 
 	log.Printf(
@@ -156,6 +186,7 @@ func (s *Servidor) handleVetos(
 	w.WriteHeader(http.StatusOK)
 }
 
+// handleEstado expone inventario, vetos y modo malicioso para inspeccion.
 func (s *Servidor) handleEstado(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -175,6 +206,13 @@ func (s *Servidor) handleEstado(
 		"vetos":      s.estado.GetVetos(),
 		"malicioso":  s.estado.EsMalicioso(),
 	}
+	log.Printf(
+		"[M%dP%d] Consulta de estado desde %s: %v",
+		s.estado.NumMaquina,
+		s.estado.IdProceso,
+		r.RemoteAddr,
+		resp,
+	)
 
 	w.Header().Set(
 		"Content-Type",
@@ -184,6 +222,7 @@ func (s *Servidor) handleEstado(
 	json.NewEncoder(w).Encode(resp)
 }
 
+// handleInfectar alterna el modo malicioso del proceso.
 func (s *Servidor) handleInfectar(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -199,6 +238,48 @@ func (s *Servidor) handleInfectar(
 	}
 
 	s.estado.ToggleMalicioso()
+	log.Printf(
+		"[M%dP%d] Modo malicioso cambiado a %v por %s",
+		s.estado.NumMaquina,
+		s.estado.IdProceso,
+		s.estado.EsMalicioso(),
+		r.RemoteAddr,
+	)
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// handleSnapshot entrega el estado usado por la recuperacion.
+func (s *Servidor) handleSnapshot(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		http.Error(
+			w,
+			"metodo no permitido",
+			http.StatusMethodNotAllowed,
+		)
+		return
+	}
+
+	w.Header().Set(
+		"Content-Type",
+		"application/json",
+	)
+
+	snapshot := s.estado.Snapshot()
+	if snapshot.Malicioso {
+		snapshot.Inventario = []Item{{Nombre: "CORRUPTO", Cantidad: 999999}}
+	}
+	log.Printf(
+		"[M%dP%d] Enviando snapshot a %s: inventario=%v vetos=%v malicioso=%v",
+		s.estado.NumMaquina,
+		s.estado.IdProceso,
+		r.RemoteAddr,
+		snapshot.Inventario,
+		snapshot.Vetos,
+		snapshot.Malicioso,
+	)
+	json.NewEncoder(w).Encode(snapshot)
 }

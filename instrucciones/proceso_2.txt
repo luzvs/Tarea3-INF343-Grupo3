@@ -1,0 +1,4 @@
+VETAR atlas
+COMPRAR atlas naranja 1
+COMPRAR elizabeth naranja 2
+PERDONAR atlas

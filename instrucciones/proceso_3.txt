@@ -1,0 +1,4 @@
+COMPRAR booker manzana 5
+VETAR sofia lamb
+COMPRAR sofia lamb manzana 1
+PERDONAR sofia lamb

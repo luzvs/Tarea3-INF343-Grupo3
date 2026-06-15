@@ -1,80 +1,145 @@
-**SISTEMAS DISTRIBUIDOS — TAREA 3 — 2026-1**
-<br>
+# INF-343 Sistemas Distribuidos - Tarea 3
 
-**INTEGRANTES:**
-  - Kris Casanga — 202021069-1
-  - Gonzalo Severín — 202073088-1
-  - Luz Vilches — 202273033-1
-<br>
+## Integrantes
 
-**INSTRUCCIONES DE USO:**
+- Kris Casanga - 202021069-1
+- Gonzalo Severin - 202073088-1
+- Luz Vilches - 202273033-1
 
-Requisito:
-  - Tener instalado Go 1.2 o superior.
-  - Poseer una cuenta del Departamento de Informática.
+## Arquitectura
 
-<br>
-Se uso Rest
+La solucion usa procesos escritos en Go que se comunican mediante una API REST sobre HTTP. Cada expendedora corresponde a un proceso con puerto propio. Los procesos mantienen estado local con mutex y replican inventario y lista de vetos a los demas procesos mediante endpoints REST.
 
-ya main, server, cliente y estado, deberian estar listos los probe localmente, intrucciones solo tiene codigo para que compile no implementa nada real. Si agregan funciones adicionales o otras cosas verifiquen si deben agregar en alguno de los archivos que trabaje, como no hay logica detras no hacen nada mas que mostrar que esta conectado, no he subido nada a las mv porque no tiene sentido todavia:
+Cada maquina ejecuta la misma cantidad de procesos. Los puertos se calculan con:
 
-lo que probe:
-```cmd
-cd expendedora
-
-go mod init expendedora
-
-go build -o ../bin/expendedora .
-
-respuesta:
-nada
-
-cd ..
-./bin/expendedora 1 1 8101 "localhost:8102,localhost:8103" &
-./bin/expendedora 1 2 8102 "localhost:8101,localhost:8103" &
-./bin/expendedora 1 3 8103 "localhost:8101,localhost:8102" &
-
-respuesta:
-[1] 7429
-[2] 7430
-[3] 7431
-
-2026/06/10 22:57:26 [M1P2] Escuchando en puerto 8102
-2026/06/10 22:57:26 [M1P3] Escuchando en puerto 8103
-2026/06/10 22:57:26 [M1P1] Escuchando en puerto 8101
-2026/06/10 22:57:27 [M1P1] Esperando peers...
-2026/06/10 22:57:27 [M1P3] Esperando peers...
-2026/06/10 22:57:27 Esperando peer localhost:8102...
-2026/06/10 22:57:27 Esperando peer localhost:8101...
-2026/06/10 22:57:27 [M1P2] Esperando peers...
-2026/06/10 22:57:27 Esperando peer localhost:8101...
-2026/06/10 22:57:27 Peer localhost:8101 listo
-2026/06/10 22:57:27 Peer localhost:8102 listo
-2026/06/10 22:57:27 Esperando peer localhost:8103...
-2026/06/10 22:57:27 Esperando peer localhost:8102...
-2026/06/10 22:57:27 Peer localhost:8101 listo
-2026/06/10 22:57:27 Esperando peer localhost:8103...
-2026/06/10 22:57:27 Peer localhost:8103 listo
-2026/06/10 22:57:27 [M1P2] Finalizada espera de peers
-2026/06/10 22:57:27 Peer localhost:8102 listo
-2026/06/10 22:57:27 [M1P3] Finalizada espera de peers
-2026/06/10 22:57:27 Peer localhost:8103 listo
-2026/06/10 22:57:27 [M1P1] Finalizada espera de peers
-2026/06/10 22:57:27 [M1P3] Inventario cargado
-2026/06/10 22:57:27 [M1P1] Inventario cargado
-2026/06/10 22:57:27 [M1P2] Inventario cargado
-2026/06/10 22:57:27 [M1P1] Ejecutando instrucciones desde instrucciones/proceso_1.txt
-2026/06/10 22:57:27 [M1P1] Instrucciones terminadas. Proceso sigue escuchando...
-2026/06/10 22:57:27 [M1P2] No se encontró archivo para proceso 2
-2026/06/10 22:57:27 [M1P3] No se encontró archivo para proceso 3
-
-(LO DE NO SE ENCONTRO ES PORQUE SOLO ESTA EL EJEMPLO QUE SALE EN EL ENUNCIADO Y HABRIA QUE CREAR 2 ARCHIVOS MAS PARA PROBAR)
-
-en otra terminal:
-curl localhost:8101/ping
-curl localhost:8101/estado
-
-respuesta:
-pong
-{"inventario":[{"nombre":"manzana","cantidad":100},{"nombre":"naranja","cantidad":10}],"malicioso":false,"vetos":{}}
+```text
+PORT_BASE + numero_maquina * 100 + numero_proceso
 ```
+
+Por defecto `PORT_BASE=8100`, por lo que `M1P1` escucha en `8201`, `M2P1` en `8301` y `M3P1` en `8401`.
+
+## Requisitos
+
+- Ubuntu en las maquinas virtuales.
+- Go 1.22 o superior.
+- `curl`.
+- Acceso de red entre las tres maquinas por los puertos usados.
+
+## Configuracion en las tres maquinas
+
+Antes de ejecutar, exportar las IP o nombres DNS de las tres VMs en cada maquina:
+
+```bash
+export MAQUINA1_HOST=<IP_MAQUINA_1>
+export MAQUINA2_HOST=<IP_MAQUINA_2>
+export MAQUINA3_HOST=<IP_MAQUINA_3>
+```
+
+Si se quiere cambiar la base de puertos:
+
+```bash
+export PORT_BASE=8100
+```
+
+Dar permiso de ejecucion al script:
+
+```bash
+sed -i 's/\r$//' script.sh
+chmod +x script.sh
+```
+
+## Inicializacion
+
+En cada VM ejecutar el mismo numero de procesos, cambiando solo el numero de maquina:
+
+```bash
+./script.sh 1 <CANTIDAD_DE_PROCESOS>
+./script.sh 2 <CANTIDAD_DE_PROCESOS>
+./script.sh 3 <CANTIDAD_DE_PROCESOS>
+```
+
+Ejemplo con un proceso por maquina:
+
+```bash
+./script.sh 1 1
+./script.sh 2 1
+./script.sh 3 1
+```
+
+Cada proceso espera hasta 2 segundos por los peers y luego queda disponible para procesar instrucciones y recibir actualizaciones.
+
+## Operaciones
+
+Restaurar un proceso:
+
+```bash
+./script.sh <NUMERO_DE_MAQUINA> RESTAURAR <NUMERO_DE_ID_DEL_TXT>
+```
+
+Matar un proceso:
+
+```bash
+./script.sh <NUMERO_DE_MAQUINA> MATAR <NUMERO_DE_ID_DEL_TXT>
+```
+
+Matar todos los procesos de la maquina:
+
+```bash
+./script.sh <NUMERO_DE_MAQUINA> KILLALL
+```
+
+Infectar o desinfectar los procesos locales de la maquina:
+
+```bash
+./script.sh INFECTAR
+```
+
+Ver estado de un proceso:
+
+```bash
+./script.sh <NUMERO_DE_MAQUINA> ESTADO <NUMERO_DE_ID_DEL_TXT>
+```
+
+## Formato de archivos
+
+Los inventarios deben estar en `inventario/*.json`:
+
+```json
+[
+  {"nombre": "manzana", "cantidad": 100},
+  {"nombre": "naranja", "cantidad": 10}
+]
+```
+
+Las instrucciones deben estar en `instrucciones/*_<ID>.txt`, por ejemplo `proceso_1.txt`:
+
+```text
+VETAR jack
+COMPRAR jack manzana 10
+COMPRAR anna dewitt manzana 15
+PERDONAR jack
+```
+
+## Logs
+
+Los logs se escriben en `logs/` con los formatos pedidos:
+
+- `inventario_M<maquina>P<proceso>.log`
+- `vetos_M<maquina>P<proceso>.log`
+
+## Recuperacion
+
+Al restaurar, el proceso consulta `/snapshot` a sus peers durante hasta 3 segundos. Luego elige el inventario con mayor cantidad de replicas iguales. Si no existe una mayoria estricta mayor a dos tercios de las respuestas recibidas, el proceso termina con error y no entra al sistema.
+
+Si un proceso esta infectado, responde snapshots con inventario corrupto. Esto permite probar que la restauracion rechaza estados sin consenso suficiente.
+
+## Consideraciones
+
+- La solucion replica listas completas de inventario y vetos.
+- Las operaciones locales sobre inventario y vetos usan mutex.
+- Existe una sincronizacion periodica cada 5 segundos hacia los peers.
+- `INFECTAR` alterna el modo malicioso de los procesos locales. Si se ejecuta otra vez, vuelven al modo normal.
+
+## Uso de asistencia por IA
+
+Se utilizo asistencia por IA para apoyar la implementacion de la logica REST, el script de ejecucion, la recuperacion por mayoria y la redaccion de este README. El codigo fue revisado para eliminar comentarios automaticos o texto no relacionado con la entrega.

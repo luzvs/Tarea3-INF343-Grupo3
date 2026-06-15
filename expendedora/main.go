@@ -8,7 +8,9 @@ import (
 	"time"
 )
 
+// main inicializa el servidor, carga o recupera estado y ejecuta instrucciones.
 func main() {
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
 	if len(os.Args) < 5 {
 		fmt.Println(
@@ -29,6 +31,16 @@ func main() {
 
 	puerto := os.Args[3]
 	peers := ParsearPeers(os.Args[4])
+	modoRestaurar := len(os.Args) >= 6 && os.Args[5] == "RESTAURAR"
+
+	log.Printf(
+		"[M%dP%d] Configuracion: puerto=%s peers=%v restaurar=%v",
+		numMaquina,
+		idProceso,
+		puerto,
+		peers,
+		modoRestaurar,
+	)
 
 	estado := NuevoEstado(
 		numMaquina,
@@ -72,23 +84,54 @@ func main() {
 	)
 
 
-	if err := estado.CargarInventarioAleatorio(
-		"inventario",
-	); err != nil {
-
-		log.Fatalf(
-			"[M%dP%d] Error cargando inventario: %v",
+	if modoRestaurar {
+		log.Printf(
+			"[M%dP%d] Restaurando estado desde peers...",
 			numMaquina,
 			idProceso,
-			err,
+		)
+
+		if err := RecuperarEstado(estado, peers); err != nil {
+			log.Fatalf(
+				"[M%dP%d] Error recuperando estado: %v",
+				numMaquina,
+				idProceso,
+				err,
+			)
+		}
+
+		log.Printf(
+			"[M%dP%d] Estado recuperado",
+			numMaquina,
+			idProceso,
+		)
+	} else {
+		if err := estado.CargarInventarioAleatorio(
+			"inventario",
+		); err != nil {
+
+			log.Fatalf(
+				"[M%dP%d] Error cargando inventario: %v",
+				numMaquina,
+				idProceso,
+				err,
+			)
+		}
+
+		log.Printf(
+			"[M%dP%d] Inventario cargado",
+			numMaquina,
+			idProceso,
 		)
 	}
 
-	log.Printf(
-		"[M%dP%d] Inventario cargado",
-		numMaquina,
-		idProceso,
-	)
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			BroadcastSnapshot(peers, estado)
+		}
+	}()
 
 	archivoInstr := BuscarArchivo(
 		"instrucciones",
@@ -96,12 +139,13 @@ func main() {
 	)
 
 	if archivoInstr == "" {
-		log.Fatalf(
+		log.Printf(
 			"[M%dP%d] No se encontró archivo para proceso %d",
 			numMaquina,
 			idProceso,
 			idProceso,
 		)
+		select {}
 	}
 
 	log.Printf(

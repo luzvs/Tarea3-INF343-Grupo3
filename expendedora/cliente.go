@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -14,6 +15,7 @@ var httpClient = &http.Client{
 	Timeout: 500 * time.Millisecond,
 }
 
+// ParsearPeers transforma la lista de peers separada por comas en un slice.
 func ParsearPeers(peersStr string) []string {
 	if peersStr == "" {
 		return nil
@@ -34,6 +36,7 @@ func ParsearPeers(peersStr string) []string {
 	return peers
 }
 
+// EsperarPeers intenta contactar a cada peer durante un tiempo maximo.
 func EsperarPeers(peers []string, timeoutSeg int) {
 
 	for _, peer := range peers {
@@ -67,6 +70,7 @@ func EsperarPeers(peers []string, timeoutSeg int) {
 	}
 }
 
+// PingPeer verifica si un peer REST esta disponible.
 func PingPeer(peer string) bool {
 
 	url := fmt.Sprintf(
@@ -85,6 +89,7 @@ func PingPeer(peer string) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
+// EnviarInventario replica el inventario a un peer, o uno corrupto si esta infectado.
 func EnviarInventario(
 	peer string,
 	inventario []Item,
@@ -92,6 +97,7 @@ func EnviarInventario(
 ) error {
 
 	payload := inventario
+	log.Printf("Enviando inventario a %s: %v", peer, inventario)
 
 	if malicioso {
 
@@ -128,14 +134,17 @@ func EnviarInventario(
 	}
 
 	defer resp.Body.Close()
+	log.Printf("Inventario enviado a %s con status %d", peer, resp.StatusCode)
 
 	return nil
 }
 
+// EnviarVetos replica la lista de vetos a un peer.
 func EnviarVetos(
 	peer string,
 	vetos map[string]int,
 ) error {
+	log.Printf("Enviando vetos a %s: %v", peer, vetos)
 
 	data, err := json.Marshal(vetos)
 
@@ -157,16 +166,19 @@ func EnviarVetos(
 	}
 
 	defer resp.Body.Close()
+	log.Printf("Vetos enviados a %s con status %d", peer, resp.StatusCode)
 
 	return nil
 }
 
 
+// BroadcastInventario envia el inventario a todos los peers concurrentemente.
 func BroadcastInventario(
 	peers []string,
 	inventario []Item,
 	malicioso bool,
 ) {
+	log.Printf("Broadcast de inventario a %d peers", len(peers))
 
 	for _, peer := range peers {
 
@@ -189,10 +201,12 @@ func BroadcastInventario(
 	}
 }
 
+// BroadcastVetos envia la lista de vetos a todos los peers concurrentemente.
 func BroadcastVetos(
 	peers []string,
 	vetos map[string]int,
 ) {
+	log.Printf("Broadcast de vetos a %d peers", len(peers))
 
 	for _, peer := range peers {
 
@@ -210,6 +224,46 @@ func BroadcastVetos(
 				)
 			}
 
+		}(peer)
+	}
+}
+
+// ObtenerSnapshot solicita a un peer su estado para recuperacion.
+func ObtenerSnapshot(peer string) (SnapshotEstado, error) {
+	log.Printf("Solicitando snapshot a %s", peer)
+	resp, err := httpClient.Get(
+		fmt.Sprintf(
+			"http://%s/snapshot",
+			peer,
+		),
+	)
+	if err != nil {
+		return SnapshotEstado{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return SnapshotEstado{}, fmt.Errorf("estado %d: %s", resp.StatusCode, string(body))
+	}
+
+	var snapshot SnapshotEstado
+	if err := json.NewDecoder(resp.Body).Decode(&snapshot); err != nil {
+		return SnapshotEstado{}, err
+	}
+
+	log.Printf("Snapshot recibido desde %s: inventario=%v vetos=%v malicioso=%v", peer, snapshot.Inventario, snapshot.Vetos, snapshot.Malicioso)
+	return snapshot, nil
+}
+
+// BroadcastSnapshot sincroniza inventario y vetos con todos los peers.
+func BroadcastSnapshot(peers []string, estado *Estado) {
+	snapshot := estado.Snapshot()
+	log.Printf("Sincronizacion periodica: inventario=%v vetos=%v peers=%d", snapshot.Inventario, snapshot.Vetos, len(peers))
+	for _, peer := range peers {
+		go func(p string) {
+			EnviarInventario(p, snapshot.Inventario, estado.EsMalicioso())
+			EnviarVetos(p, snapshot.Vetos)
 		}(peer)
 	}
 }
