@@ -148,7 +148,6 @@ func parsearCompra(partes []string) (string, string, int, bool) {
 // escribirLogInventario agrega una linea al log de inventario del proceso.
 func (e *Ejecutor) escribirLogInventario(instruccion, resultado string) {
 	logPath := filepath.Join(
-		"..",
 		"logs",
 		fmt.Sprintf("inventario_M%dP%d.log", e.numMaquina, e.idProceso),
 	)
@@ -158,7 +157,6 @@ func (e *Ejecutor) escribirLogInventario(instruccion, resultado string) {
 // escribirLogVetos reescribe el log de vetos con el estado actual.
 func (e *Ejecutor) escribirLogVetos(vetos map[string]int) {
 	logPath := filepath.Join(
-		"..",
 		"logs",
 		fmt.Sprintf("vetos_M%dP%d.log", e.numMaquina, e.idProceso),
 	)

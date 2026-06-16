@@ -80,11 +80,12 @@ iniciar_proceso() {
   local proceso="$2"
   local cantidad="$3"
   local modo="${4:-}"
-  local puerto peers pid_file
+  local puerto peers pid_file runtime_log
 
   puerto="$(puerto_proceso "$maquina" "$proceso")"
   peers="$(peers_para "$maquina" "$proceso" "$cantidad")"
   pid_file="$RUN_DIR/M${maquina}P${proceso}.pid"
+  runtime_log="$LOG_DIR/runtime_M${maquina}P${proceso}.log"
   if [[ -f "$pid_file" ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
     echo "M${maquina}P${proceso} ya está corriendo con PID $(cat "$pid_file")"
     return
@@ -94,12 +95,14 @@ iniciar_proceso() {
     echo "Iniciando M${maquina}P${proceso} en modo RESTAURAR"
     echo "  puerto=${puerto}"
     echo "  peers=${peers}"
-    (cd "$ROOT_DIR" && "$BIN_DIR/expendedora" "$maquina" "$proceso" "$puerto" "$peers" RESTAURAR & echo $! > "$pid_file")
+    echo "  log=${runtime_log}"
+    (cd "$ROOT_DIR" && "$BIN_DIR/expendedora" "$maquina" "$proceso" "$puerto" "$peers" RESTAURAR >> "$runtime_log" 2>&1 & echo $! > "$pid_file")
   else
     echo "Iniciando M${maquina}P${proceso}"
     echo "  puerto=${puerto}"
     echo "  peers=${peers}"
-    (cd "$ROOT_DIR" && "$BIN_DIR/expendedora" "$maquina" "$proceso" "$puerto" "$peers" & echo $! > "$pid_file")
+    echo "  log=${runtime_log}"
+    (cd "$ROOT_DIR" && "$BIN_DIR/expendedora" "$maquina" "$proceso" "$puerto" "$peers" >> "$runtime_log" 2>&1 & echo $! > "$pid_file")
   fi
 
   echo "M${maquina}P${proceso} iniciado en puerto ${puerto} con PID $(cat "$pid_file")"
