@@ -94,12 +94,12 @@ iniciar_proceso() {
     echo "Iniciando M${maquina}P${proceso} en modo RESTAURAR"
     echo "  puerto=${puerto}"
     echo "  peers=${peers}"
-    (cd "$APP_DIR" && "$BIN_DIR/expendedora" "$maquina" "$proceso" "$puerto" "$peers" RESTAURAR & echo $! > "$pid_file")
+    (cd "$ROOT_DIR" && "$BIN_DIR/expendedora" "$maquina" "$proceso" "$puerto" "$peers" RESTAURAR & echo $! > "$pid_file")
   else
     echo "Iniciando M${maquina}P${proceso}"
     echo "  puerto=${puerto}"
     echo "  peers=${peers}"
-    (cd "$APP_DIR" && "$BIN_DIR/expendedora" "$maquina" "$proceso" "$puerto" "$peers" & echo $! > "$pid_file")
+    (cd "$ROOT_DIR" && "$BIN_DIR/expendedora" "$maquina" "$proceso" "$puerto" "$peers" & echo $! > "$pid_file")
   fi
 
   echo "M${maquina}P${proceso} iniciado en puerto ${puerto} con PID $(cat "$pid_file")"

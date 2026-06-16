@@ -30,9 +30,9 @@ Por defecto `PORT_BASE=8100`, por lo que `M1P1` escucha en `8201`, `M2P1` en `83
 Antes de ejecutar, exportar las IP o nombres DNS de las tres VMs en cada maquina:
 
 ```bash
-export MAQUINA1_HOST=<IP_MAQUINA_1>
-export MAQUINA2_HOST=<IP_MAQUINA_2>
-export MAQUINA3_HOST=<IP_MAQUINA_3>
+export MAQUINA1_HOST=10.10.28.17
+export MAQUINA2_HOST=10.10.28.18
+export MAQUINA3_HOST=10.10.28.19
 ```
 
 Si se quiere cambiar la base de puertos:
