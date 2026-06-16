@@ -18,12 +18,22 @@ Uso:
   ./script.sh <NUMERO_DE_MAQUINA> MATAR <NUMERO_DE_ID_DEL_TXT>
   ./script.sh <NUMERO_DE_MAQUINA> KILLALL
   ./script.sh <NUMERO_DE_MAQUINA> ESTADO <NUMERO_DE_ID_DEL_TXT>
+  ./script.sh <NUMERO_DE_MAQUINA> LOGS <NUMERO_DE_ID_DEL_TXT>
+  ./script.sh <NUMERO_DE_MAQUINA> RUNTIME <NUMERO_DE_ID_DEL_TXT> [LINEAS]
   ./script.sh INFECTAR
 
 Variables opcionales:
   MAQUINA1_HOST, MAQUINA2_HOST, MAQUINA3_HOST para indicar IP/host de cada VM.
   PORT_BASE para cambiar la base de puertos. Por defecto usa 8100.
 USAGE
+}
+
+print_header() {
+  local titulo="$1"
+  echo
+  echo "============================================================"
+  echo " $titulo"
+  echo "============================================================"
 }
 
 host_maquina() {
@@ -70,9 +80,9 @@ peers_para() {
 }
 
 build_app() {
-  echo "Compilando expendedora..."
+  print_header "Compilando expendedora"
   (cd "$APP_DIR" && go build -o "$BIN_DIR/expendedora" .)
-  echo "Compilacion lista: $BIN_DIR/expendedora"
+  echo "OK  Binario listo: $BIN_DIR/expendedora"
 }
 
 iniciar_proceso() {
@@ -86,26 +96,27 @@ iniciar_proceso() {
   peers="$(peers_para "$maquina" "$proceso" "$cantidad")"
   pid_file="$RUN_DIR/M${maquina}P${proceso}.pid"
   runtime_log="$LOG_DIR/runtime_M${maquina}P${proceso}.log"
+
   if [[ -f "$pid_file" ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
-    echo "M${maquina}P${proceso} ya está corriendo con PID $(cat "$pid_file")"
+    echo "OK  M${maquina}P${proceso} ya esta corriendo con PID $(cat "$pid_file")"
     return
   fi
 
   if [[ "$modo" == "RESTAURAR" ]]; then
-    echo "Iniciando M${maquina}P${proceso} en modo RESTAURAR"
-    echo "  puerto=${puerto}"
-    echo "  peers=${peers}"
-    echo "  log=${runtime_log}"
+    print_header "Iniciando M${maquina}P${proceso} en modo RESTAURAR"
+    echo "  Puerto : ${puerto}"
+    echo "  Peers  : ${peers}"
+    echo "  Runtime: ${runtime_log}"
     (cd "$ROOT_DIR" && "$BIN_DIR/expendedora" "$maquina" "$proceso" "$puerto" "$peers" RESTAURAR >> "$runtime_log" 2>&1 & echo $! > "$pid_file")
   else
-    echo "Iniciando M${maquina}P${proceso}"
-    echo "  puerto=${puerto}"
-    echo "  peers=${peers}"
-    echo "  log=${runtime_log}"
+    print_header "Iniciando M${maquina}P${proceso}"
+    echo "  Puerto : ${puerto}"
+    echo "  Peers  : ${peers}"
+    echo "  Runtime: ${runtime_log}"
     (cd "$ROOT_DIR" && "$BIN_DIR/expendedora" "$maquina" "$proceso" "$puerto" "$peers" >> "$runtime_log" 2>&1 & echo $! > "$pid_file")
   fi
 
-  echo "M${maquina}P${proceso} iniciado en puerto ${puerto} con PID $(cat "$pid_file")"
+  echo "OK  M${maquina}P${proceso} iniciado con PID $(cat "$pid_file")"
 }
 
 matar_proceso() {
@@ -114,7 +125,7 @@ matar_proceso() {
   local pid_file="$RUN_DIR/M${maquina}P${proceso}.pid"
 
   if [[ ! -f "$pid_file" ]]; then
-    echo "No hay PID registrado para M${maquina}P${proceso}"
+    echo "INFO No hay PID registrado para M${maquina}P${proceso}"
     return
   fi
 
@@ -122,9 +133,9 @@ matar_proceso() {
   pid="$(cat "$pid_file")"
   if kill -0 "$pid" 2>/dev/null; then
     kill "$pid"
-    echo "M${maquina}P${proceso} detenido"
+    echo "OK  M${maquina}P${proceso} detenido"
   else
-    echo "M${maquina}P${proceso} no estaba corriendo"
+    echo "INFO M${maquina}P${proceso} no estaba corriendo"
   fi
   rm -f "$pid_file"
 }
@@ -132,11 +143,77 @@ matar_proceso() {
 estado_proceso() {
   local maquina="$1"
   local proceso="$2"
-  local host puerto
+  local host puerto respuesta
   host="$(host_maquina "$maquina")"
   puerto="$(puerto_proceso "$maquina" "$proceso")"
-  curl -s "http://${host}:${puerto}/estado"
-  echo
+  respuesta="$(curl -s "http://${host}:${puerto}/estado")"
+
+  print_header "Estado M${maquina}P${proceso}"
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s\n' "$respuesta" | python3 -m json.tool
+  else
+    printf '%s\n' "$respuesta"
+  fi
+}
+
+mostrar_logs() {
+  local maquina="$1"
+  local proceso="$2"
+  local inventario_log="$LOG_DIR/inventario_M${maquina}P${proceso}.log"
+  local vetos_log="$LOG_DIR/vetos_M${maquina}P${proceso}.log"
+
+  print_header "Log de inventario M${maquina}P${proceso}"
+  if [[ -s "$inventario_log" ]]; then
+    awk -F ' \\| ' '
+      BEGIN {
+        printf "  %-4s %-46s %-12s\n", "#", "Instruccion", "Resultado"
+        printf "  %-4s %-46s %-12s\n", "----", "----------------------------------------------", "------------"
+      }
+      {
+        resultado = $2
+        if (resultado == "") {
+          resultado = "-"
+        }
+        printf "  %-4d %-46s %-12s\n", NR, $1, resultado
+      }
+    ' "$inventario_log"
+  else
+    echo "  Sin registros de inventario."
+  fi
+
+  print_header "Lista de vetos M${maquina}P${proceso}"
+  if [[ -s "$vetos_log" ]]; then
+    awk '
+      BEGIN {
+        printf "  %-34s %-8s\n", "Persona", "Counter"
+        printf "  %-34s %-8s\n", "----------------------------------", "--------"
+      }
+      /^VETADO / {
+        counter = $NF
+        persona = $0
+        sub(/^VETADO /, "", persona)
+        sub(" " counter "$", "", persona)
+        printf "  %-34s %-8s\n", persona, counter
+      }
+    ' "$vetos_log"
+  else
+    echo "  Sin personas vetadas."
+  fi
+}
+
+mostrar_runtime() {
+  local maquina="$1"
+  local proceso="$2"
+  local lineas="${3:-40}"
+  local runtime_log="$LOG_DIR/runtime_M${maquina}P${proceso}.log"
+
+  print_header "Comunicacion interna M${maquina}P${proceso} (ultimas ${lineas} lineas)"
+  if [[ -s "$runtime_log" ]]; then
+    tail -n "$lineas" "$runtime_log"
+  else
+    echo "  Sin registros runtime."
+    echo "  Si el proceso fue iniciado antes de este cambio, reinicialo."
+  fi
 }
 
 infectar_locales() {
@@ -148,12 +225,13 @@ infectar_locales() {
     maquina="${MAQUINA_LOCAL:-1}"
   fi
 
+  print_header "Alternando modo malicioso en M${maquina}"
   for proceso in $(seq 1 "$cantidad"); do
     local puerto
     puerto="$(puerto_proceso "$maquina" "$proceso")"
     curl -s -X POST "http://localhost:${puerto}/infectar" >/dev/null || true
+    echo "OK  M${maquina}P${proceso} alternado"
   done
-  echo "Procesos locales de M${maquina} alternaron modo malicioso"
 }
 
 if [[ "$#" -lt 1 ]]; then
@@ -197,6 +275,14 @@ case "$ACCION" in
       ESTADO)
         [[ "$#" -eq 3 ]] || { usage; exit 1; }
         estado_proceso "$MAQUINA" "$3"
+        ;;
+      LOGS)
+        [[ "$#" -eq 3 ]] || { usage; exit 1; }
+        mostrar_logs "$MAQUINA" "$3"
+        ;;
+      RUNTIME)
+        [[ "$#" -eq 3 || "$#" -eq 4 ]] || { usage; exit 1; }
+        mostrar_runtime "$MAQUINA" "$3" "${4:-40}"
         ;;
       *)
         usage

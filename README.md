@@ -72,6 +72,18 @@ curl http://localhost:8201/estado
 ls -lh logs/
 ```
 
+Para ver los logs de un proceso en formato de tabla:
+
+```bash
+./script.sh 1 LOGS 1
+```
+
+Para ver la comunicacion interna del proceso sin ensuciar la consola principal:
+
+```bash
+./script.sh 1 RUNTIME 1
+```
+
 Para detener los procesos locales de una VM:
 
 ```bash
@@ -151,6 +163,18 @@ Ver estado de un proceso:
 
 ```bash
 ./script.sh <NUMERO_DE_MAQUINA> ESTADO <NUMERO_DE_ID_DEL_TXT>
+```
+
+Ver logs de inventario y vetos en consola con formato legible:
+
+```bash
+./script.sh <NUMERO_DE_MAQUINA> LOGS <NUMERO_DE_ID_DEL_TXT>
+```
+
+Ver los ultimos mensajes internos de comunicacion de un proceso:
+
+```bash
+./script.sh <NUMERO_DE_MAQUINA> RUNTIME <NUMERO_DE_ID_DEL_TXT> [LINEAS]
 ```
 
 ## Formato de archivos
