@@ -84,10 +84,46 @@ func (e *Estado) GetVetos() map[string]int {
 }
 
 // SetVetos reemplaza la lista local de vetos con una copia recibida.
+// Solo se usa durante la recuperacion de estado (AplicarSnapshot).
+// Para actualizaciones normales usar MergeVetos.
 func (e *Estado) SetVetos(vetos map[string]int) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.Vetos = copiarVetos(vetos)
+}
+
+// MergeVetos fusiona vetos recibidos desde un peer aplicando la regla
+// "tomar el counter mas alto" para cada persona. Esto garantiza que un
+// VETAR propagado nunca sea borrado por una actualizacion desactualizada
+// que llego tarde, y que un PERDONAR (counter=0 / ausente) solo sea
+// aceptado si el peer lo envia explicitamente con counter 0 o ausente
+// y el nodo local tampoco lo tiene activo.
+//
+// Regla resumida por persona:
+//   - Si el peer trae counter > 0 y local no lo tiene o tiene counter menor → usar el del peer.
+//   - Si el peer NO trae la persona (ausente) → mantener local si existe.
+//   - Si el peer trae counter = 0 → equivale a PERDONAR; solo se aplica si local
+//     tambien tiene 0 o no existe (no pisamos un veto activo con un perdon tardio).
+func (e *Estado) MergeVetos(incoming map[string]int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	for persona, counterIncoming := range incoming {
+		counterLocal, existe := e.Vetos[persona]
+
+		if counterIncoming <= 0 {
+			// El peer dice perdonado: solo aplicamos si localmente tampoco esta activo.
+			if !existe || counterLocal <= 0 {
+				delete(e.Vetos, persona)
+			}
+			continue
+		}
+
+		// El peer tiene veto activo; tomamos el counter mas alto (mas reciente / mas restrictivo).
+		if !existe || counterIncoming > counterLocal {
+			e.Vetos[persona] = counterIncoming
+		}
+	}
 }
 
 // EstaVetado indica si una persona tiene un counter de veto activo.
@@ -194,14 +230,14 @@ func (e *Estado) decrementarVetosBloqueado() {
 	}
 }
 
-// copiarInventario evita compartir slices mutables entre procesos internos.
+// copiarInventario evita compartir slices mutables entre goroutines.
 func copiarInventario(items []Item) []Item {
 	copia := make([]Item, len(items))
 	copy(copia, items)
 	return copia
 }
 
-// copiarVetos evita compartir mapas mutables entre procesos internos.
+// copiarVetos evita compartir mapas mutables entre goroutines.
 func copiarVetos(vetos map[string]int) map[string]int {
 	copia := make(map[string]int, len(vetos))
 	for k, v := range vetos {
@@ -217,6 +253,23 @@ func ClaveInventario(items []Item) string {
 		return copia[i].Nombre < copia[j].Nombre
 	})
 	data, _ := json.Marshal(copia)
+	return string(data)
+}
+
+// ClaveVetos serializa un mapa de vetos de forma determinista para comparar replicas.
+func ClaveVetos(vetos map[string]int) string {
+	type entrada struct {
+		Nombre  string `json:"nombre"`
+		Counter int    `json:"counter"`
+	}
+	lista := make([]entrada, 0, len(vetos))
+	for k, v := range vetos {
+		lista = append(lista, entrada{k, v})
+	}
+	sort.Slice(lista, func(i, j int) bool {
+		return lista[i].Nombre < lista[j].Nombre
+	})
+	data, _ := json.Marshal(lista)
 	return string(data)
 }
 
