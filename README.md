@@ -25,6 +25,71 @@ Por defecto `PORT_BASE=8100`, por lo que `M1P1` escucha en `8201`, `M2P1` en `83
 - `curl`.
 - Acceso de red entre las tres maquinas por los puertos usados.
 
+## Guia rapida para probar en las VMs
+
+Para una prueba distribuida real se deben usar las tres maquinas al mismo
+tiempo. Cada maquina ejecuta el mismo repositorio, pero se inicia con un numero
+distinto:
+
+- M1: `10.10.28.17`
+- M2: `10.10.28.18`
+- M3: `10.10.28.19`
+
+En cada VM, entrar a la carpeta del repositorio y preparar las variables:
+
+```bash
+cd Tarea3-INF343-Grupo3
+export MAQUINA1_HOST=10.10.28.17
+export MAQUINA2_HOST=10.10.28.18
+export MAQUINA3_HOST=10.10.28.19
+sed -i 's/\r$//' script.sh
+chmod +x script.sh
+```
+
+Luego iniciar una terminal SSH para cada VM y ejecutar:
+
+```bash
+# En 10.10.28.17
+./script.sh 1 3
+
+# En 10.10.28.18
+./script.sh 2 3
+
+# En 10.10.28.19
+./script.sh 3 3
+```
+
+El segundo parametro es la cantidad de procesos por maquina. Como existen
+`proceso_1.txt`, `proceso_2.txt` y `proceso_3.txt`, la prueba completa usa `3`.
+Para una prueba minima se puede usar `1`, pero solo se ejecutara
+`proceso_1.txt`.
+
+Para revisar que quedo corriendo:
+
+```bash
+./script.sh 1 ESTADO 1
+curl http://localhost:8201/estado
+ls -lh logs/
+```
+
+Para ver los logs de un proceso en formato de tabla:
+
+```bash
+./script.sh 1 LOGS 1
+```
+
+Para ver la comunicacion interna del proceso sin ensuciar la consola principal:
+
+```bash
+./script.sh 1 RUNTIME 1
+```
+
+Para detener los procesos locales de una VM:
+
+```bash
+./script.sh <NUMERO_DE_MAQUINA> KILLALL
+```
+
 ## Configuracion en las tres maquinas
 
 Antes de ejecutar, exportar las IP o nombres DNS de las tres VMs en cada maquina:
@@ -98,6 +163,18 @@ Ver estado de un proceso:
 
 ```bash
 ./script.sh <NUMERO_DE_MAQUINA> ESTADO <NUMERO_DE_ID_DEL_TXT>
+```
+
+Ver logs de inventario y vetos en consola con formato legible:
+
+```bash
+./script.sh <NUMERO_DE_MAQUINA> LOGS <NUMERO_DE_ID_DEL_TXT>
+```
+
+Ver los ultimos mensajes internos de comunicacion de un proceso:
+
+```bash
+./script.sh <NUMERO_DE_MAQUINA> RUNTIME <NUMERO_DE_ID_DEL_TXT> [LINEAS]
 ```
 
 ## Formato de archivos

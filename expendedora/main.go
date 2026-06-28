@@ -46,6 +46,7 @@ func main() {
 		numMaquina,
 		idProceso,
 	)
+	InicializarLogs(numMaquina, idProceso)
 
 	srv := NuevoServidor(
 		puerto,
@@ -72,7 +73,7 @@ func main() {
 		idProceso,
 	)
 
-	EsperarPeers(
+	EsperarPeersParalelo(
 		peers,
 		2,
 	)

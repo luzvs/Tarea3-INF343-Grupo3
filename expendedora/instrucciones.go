@@ -28,6 +28,32 @@ func NuevoEjecutor(estado *Estado, peers []string, numMaquina, idProceso int) *E
 	}
 }
 
+// InicializarLogs crea los archivos de inventario y vetos en logs/ para que sean visibles desde el inicio.
+func InicializarLogs(numMaquina, idProceso int) {
+	inventarioLog := filepath.Join(
+		"logs",
+		fmt.Sprintf("inventario_M%dP%d.log", numMaquina, idProceso),
+	)
+	vetosLog := filepath.Join(
+		"logs",
+		fmt.Sprintf("vetos_M%dP%d.log", numMaquina, idProceso),
+	)
+
+	if err := os.MkdirAll("logs", 0755); err != nil {
+		log.Printf("[M%dP%d] Error creando carpeta logs: %v", numMaquina, idProceso, err)
+		return
+	}
+
+	for _, path := range []string{inventarioLog, vetosLog} {
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Printf("[M%dP%d] Error inicializando %s: %v", numMaquina, idProceso, path, err)
+			continue
+		}
+		f.Close()
+	}
+}
+
 // BuscarArchivo encuentra el archivo de instrucciones que termina en _ID.txt.
 func BuscarArchivo(carpeta string, id int) string {
 	patron := filepath.Join(carpeta, fmt.Sprintf("*_%d.txt", id))
@@ -164,6 +190,7 @@ func (e *Ejecutor) escribirLogVetos(vetos map[string]int) {
 	_ = os.MkdirAll(filepath.Dir(logPath), 0755)
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
+		log.Printf("[M%dP%d] Error escribiendo %s: %v", e.numMaquina, e.idProceso, logPath, err)
 		return
 	}
 	defer f.Close()
@@ -186,6 +213,7 @@ func escribirLineaLog(logPath, linea string) {
 	_ = os.MkdirAll(filepath.Dir(logPath), 0755)
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
+		log.Printf("Error escribiendo %s: %v", logPath, err)
 		return
 	}
 	defer f.Close()
