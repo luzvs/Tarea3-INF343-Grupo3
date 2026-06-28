@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -68,6 +69,36 @@ func EsperarPeers(peers []string, timeoutSeg int) {
 			)
 		}
 	}
+}
+
+// EsperarPeersParalelo contacta todos los peers al mismo tiempo para no retrasar las instrucciones.
+func EsperarPeersParalelo(peers []string, timeoutSeg int) {
+	var wg sync.WaitGroup
+
+	for _, peer := range peers {
+		wg.Add(1)
+		go func(peer string) {
+			defer wg.Done()
+
+			log.Printf("Esperando peer %s...", peer)
+
+			deadline := time.Now().Add(
+				time.Duration(timeoutSeg) * time.Second,
+			)
+
+			for time.Now().Before(deadline) {
+				if PingPeer(peer) {
+					log.Printf("Peer %s listo", peer)
+					return
+				}
+				time.Sleep(200 * time.Millisecond)
+			}
+
+			log.Printf("Peer %s no respondio en %d segundos", peer, timeoutSeg)
+		}(peer)
+	}
+
+	wg.Wait()
 }
 
 // PingPeer verifica si un peer REST esta disponible.

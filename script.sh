@@ -80,9 +80,19 @@ peers_para() {
 }
 
 build_app() {
-  print_header "Compilando expendedora"
-  (cd "$APP_DIR" && go build -o "$BIN_DIR/expendedora" .)
-  echo "OK  Binario listo: $BIN_DIR/expendedora"
+	print_header "Compilando expendedora"
+	(cd "$APP_DIR" && go build -o "$BIN_DIR/expendedora" .)
+	echo "OK  Binario listo: $BIN_DIR/expendedora"
+}
+
+validar_hosts() {
+  for maquina in 1 2 3; do
+    local var="MAQUINA${maquina}_HOST"
+    if [[ -z "${!var:-}" ]]; then
+      echo "WARN ${var} no esta definida; se usara localhost para M${maquina}."
+      echo "WARN En tres VMs reales debes exportar MAQUINA1_HOST, MAQUINA2_HOST y MAQUINA3_HOST en cada VM."
+    fi
+  done
 }
 
 iniciar_proceso() {
@@ -294,6 +304,7 @@ case "$ACCION" in
     CANTIDAD="$ACCION"
     echo "$CANTIDAD" > "$RUN_DIR/cantidad_procesos"
     echo "$MAQUINA" > "$RUN_DIR/maquina_local"
+    validar_hosts
     build_app
     for proceso in $(seq 1 "$CANTIDAD"); do
       iniciar_proceso "$MAQUINA" "$proceso" "$CANTIDAD"
