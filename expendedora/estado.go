@@ -67,6 +67,11 @@ func (e *Estado) SetInventario(items []Item) {
 	e.Inventario = copiarInventario(items)
 }
 
+// EsInventarioCorrupto detecta el inventario falso usado por procesos maliciosos.
+func EsInventarioCorrupto(items []Item) bool {
+	return len(items) == 1 && items[0].Nombre == "CORRUPTO" && items[0].Cantidad == 999999
+}
+
 // GetVetos retorna una copia de la lista de vetos.
 func (e *Estado) GetVetos() map[string]int {
 	e.mu.Lock()

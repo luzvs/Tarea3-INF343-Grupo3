@@ -50,10 +50,19 @@ func aplicarMayoritaria(estado *Estado, snapshots []SnapshotEstado) error {
 	representante := make(map[string]SnapshotEstado)
 
 	for _, snapshot := range snapshots {
+		if EsInventarioCorrupto(snapshot.Inventario) {
+			log.Printf("Recuperacion: snapshot corrupto recibido; cuenta contra el consenso")
+			continue
+		}
+
 		clave := ClaveInventario(snapshot.Inventario)
 		conteo[clave]++
 		representante[clave] = snapshot
 		log.Printf("Recuperacion: inventario candidato=%s conteo=%d", clave, conteo[clave])
+	}
+
+	if len(conteo) == 0 {
+		return fmt.Errorf("no se recibieron inventarios validos para recuperar")
 	}
 
 	var mejorClave string
@@ -66,7 +75,7 @@ func aplicarMayoritaria(estado *Estado, snapshots []SnapshotEstado) error {
 	}
 
 	if mejorCantidad*3 <= len(snapshots)*2 {
-		log.Printf("Recuperacion rechazada: mejor consenso %d/%d", mejorCantidad, len(snapshots))
+		log.Printf("Recuperacion rechazada: mejor consenso valido %d/%d respuestas recibidas", mejorCantidad, len(snapshots))
 		return fmt.Errorf(
 			"no hay consenso de inventario: %d/%d respuestas iguales",
 			mejorCantidad,
@@ -75,6 +84,6 @@ func aplicarMayoritaria(estado *Estado, snapshots []SnapshotEstado) error {
 	}
 
 	estado.AplicarSnapshot(representante[mejorClave])
-	log.Printf("Recuperacion aceptada: consenso %d/%d inventario=%s", mejorCantidad, len(snapshots), mejorClave)
+	log.Printf("Recuperacion aceptada: consenso valido %d/%d respuestas recibidas inventario=%s", mejorCantidad, len(snapshots), mejorClave)
 	return nil
 }

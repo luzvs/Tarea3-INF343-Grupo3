@@ -120,7 +120,7 @@ func PingPeer(peer string) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-// EnviarInventario replica el inventario a un peer, o uno corrupto si esta infectado.
+// EnviarInventario replica el inventario normal a un peer.
 func EnviarInventario(
 	peer string,
 	inventario []Item,
@@ -129,21 +129,6 @@ func EnviarInventario(
 
 	payload := inventario
 	log.Printf("Enviando inventario a %s: %v", peer, inventario)
-
-	if malicioso {
-
-		payload = []Item{
-			{
-				Nombre:   "CORRUPTO",
-				Cantidad: 999999,
-			},
-		}
-
-		log.Printf(
-			"Enviando inventario CORRUPTO a %s",
-			peer,
-		)
-	}
 
 	data, err := json.Marshal(payload)
 
@@ -293,7 +278,7 @@ func BroadcastSnapshot(peers []string, estado *Estado) {
 	log.Printf("Sincronizacion periodica: inventario=%v vetos=%v peers=%d", snapshot.Inventario, snapshot.Vetos, len(peers))
 	for _, peer := range peers {
 		go func(p string) {
-			EnviarInventario(p, snapshot.Inventario, estado.EsMalicioso())
+			EnviarInventario(p, snapshot.Inventario, false)
 			EnviarVetos(p, snapshot.Vetos)
 		}(peer)
 	}

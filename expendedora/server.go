@@ -109,6 +109,21 @@ func (s *Servidor) handleInventario(
 		return
 	}
 
+	if EsInventarioCorrupto(items) {
+		log.Printf(
+			"[M%dP%d] Inventario corrupto rechazado desde %s",
+			s.estado.NumMaquina,
+			s.estado.IdProceso,
+			r.RemoteAddr,
+		)
+		http.Error(
+			w,
+			"inventario corrupto rechazado",
+			http.StatusConflict,
+		)
+		return
+	}
+
 	log.Printf(
 		"[M%dP%d] Recibido inventario desde %s: %v",
 		s.estado.NumMaquina,
