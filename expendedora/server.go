@@ -21,9 +21,7 @@ func NuevoServidor(puerto string, estado *Estado) *Servidor {
 		estado: estado,
 		mux:    http.NewServeMux(),
 	}
-
 	s.registrarRutas()
-
 	return s
 }
 
@@ -35,31 +33,21 @@ func (s *Servidor) Iniciar() error {
 		s.estado.IdProceso,
 		s.puerto,
 	)
-
 	return http.ListenAndServe(":"+s.puerto, s.mux)
 }
 
 // registrarRutas asocia los endpoints REST con sus handlers.
 func (s *Servidor) registrarRutas() {
-
 	s.mux.HandleFunc("/ping", s.handlePing)
-
 	s.mux.HandleFunc("/inventario", s.handleInventario)
-
 	s.mux.HandleFunc("/vetos", s.handleVetos)
-
 	s.mux.HandleFunc("/estado", s.handleEstado)
-
 	s.mux.HandleFunc("/infectar", s.handleInfectar)
-
 	s.mux.HandleFunc("/snapshot", s.handleSnapshot)
 }
 
 // handlePing responde disponibilidad basica del proceso.
-func (s *Servidor) handlePing(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (s *Servidor) handlePing(w http.ResponseWriter, r *http.Request) {
 	log.Printf(
 		"[M%dP%d] Recibido /ping desde %s",
 		s.estado.NumMaquina,
@@ -71,41 +59,22 @@ func (s *Servidor) handlePing(
 }
 
 // handleInventario recibe una replica de inventario desde otro proceso.
-func (s *Servidor) handleInventario(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-
+func (s *Servidor) handleInventario(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(
-			w,
-			"metodo no permitido",
-			http.StatusMethodNotAllowed,
-		)
+		http.Error(w, "metodo no permitido", http.StatusMethodNotAllowed)
 		return
 	}
-
 	defer r.Body.Close()
 
 	body, err := io.ReadAll(r.Body)
-
 	if err != nil {
-		http.Error(
-			w,
-			"error leyendo body",
-			http.StatusBadRequest,
-		)
+		http.Error(w, "error leyendo body", http.StatusBadRequest)
 		return
 	}
 
 	var items []Item
-
 	if err := json.Unmarshal(body, &items); err != nil {
-		http.Error(
-			w,
-			"json invalido",
-			http.StatusBadRequest,
-		)
+		http.Error(w, "json invalido", http.StatusBadRequest)
 		return
 	}
 
@@ -118,52 +87,29 @@ func (s *Servidor) handleInventario(
 	)
 
 	s.estado.SetInventario(items)
-
-	log.Printf(
-		"[M%dP%d] Inventario actualizado",
-		s.estado.NumMaquina,
-		s.estado.IdProceso,
-	)
-
+	log.Printf("[M%dP%d] Inventario actualizado", s.estado.NumMaquina, s.estado.IdProceso)
 	w.WriteHeader(http.StatusOK)
 }
 
-// handleVetos recibe una replica de la lista de vetos.
-func (s *Servidor) handleVetos(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-
+// handleVetos recibe una actualizacion de vetos desde otro proceso y la fusiona
+// con el estado local usando MergeVetos, evitando que mensajes tardios sobreescriban
+// vetos mas recientes aplicados localmente (garantia de convergencia determinista).
+func (s *Servidor) handleVetos(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(
-			w,
-			"metodo no permitido",
-			http.StatusMethodNotAllowed,
-		)
+		http.Error(w, "metodo no permitido", http.StatusMethodNotAllowed)
 		return
 	}
-
 	defer r.Body.Close()
 
 	body, err := io.ReadAll(r.Body)
-
 	if err != nil {
-		http.Error(
-			w,
-			"error leyendo body",
-			http.StatusBadRequest,
-		)
+		http.Error(w, "error leyendo body", http.StatusBadRequest)
 		return
 	}
 
 	var vetos map[string]int
-
 	if err := json.Unmarshal(body, &vetos); err != nil {
-		http.Error(
-			w,
-			"json invalido",
-			http.StatusBadRequest,
-		)
+		http.Error(w, "json invalido", http.StatusBadRequest)
 		return
 	}
 
@@ -175,29 +121,18 @@ func (s *Servidor) handleVetos(
 		vetos,
 	)
 
-	s.estado.SetVetos(vetos)
+	// MergeVetos en lugar de SetVetos: nunca pisamos un veto activo local
+	// con un mensaje desactualizado que llegue tarde.
+	s.estado.MergeVetos(vetos)
 
-	log.Printf(
-		"[M%dP%d] Vetos actualizados",
-		s.estado.NumMaquina,
-		s.estado.IdProceso,
-	)
-
+	log.Printf("[M%dP%d] Vetos fusionados", s.estado.NumMaquina, s.estado.IdProceso)
 	w.WriteHeader(http.StatusOK)
 }
 
 // handleEstado expone inventario, vetos y modo malicioso para inspeccion.
-func (s *Servidor) handleEstado(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-
+func (s *Servidor) handleEstado(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(
-			w,
-			"metodo no permitido",
-			http.StatusMethodNotAllowed,
-		)
+		http.Error(w, "metodo no permitido", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -214,26 +149,14 @@ func (s *Servidor) handleEstado(
 		resp,
 	)
 
-	w.Header().Set(
-		"Content-Type",
-		"application/json",
-	)
-
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
 
 // handleInfectar alterna el modo malicioso del proceso.
-func (s *Servidor) handleInfectar(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-
+func (s *Servidor) handleInfectar(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(
-			w,
-			"metodo no permitido",
-			http.StatusMethodNotAllowed,
-		)
+		http.Error(w, "metodo no permitido", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -245,28 +168,20 @@ func (s *Servidor) handleInfectar(
 		s.estado.EsMalicioso(),
 		r.RemoteAddr,
 	)
-
 	w.WriteHeader(http.StatusOK)
 }
 
 // handleSnapshot entrega el estado usado por la recuperacion.
-func (s *Servidor) handleSnapshot(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+// Si el proceso es malicioso, envia un inventario corrupto pero los vetos
+// los envia reales, ya que corromper los vetos podria hacer pasar splicers
+// vetados — el enunciado solo especifica corrupcion de inventario.
+func (s *Servidor) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
-		http.Error(
-			w,
-			"metodo no permitido",
-			http.StatusMethodNotAllowed,
-		)
+		http.Error(w, "metodo no permitido", http.StatusMethodNotAllowed)
 		return
 	}
 
-	w.Header().Set(
-		"Content-Type",
-		"application/json",
-	)
+	w.Header().Set("Content-Type", "application/json")
 
 	snapshot := s.estado.Snapshot()
 	if snapshot.Malicioso {

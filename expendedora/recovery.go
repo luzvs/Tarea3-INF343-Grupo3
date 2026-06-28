@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// RecuperarEstado solicita snapshots y recupera usando mayoria de inventarios.
+// RecuperarEstado solicita snapshots y recupera usando mayoria de inventarios Y vetos.
 func RecuperarEstado(estado *Estado, peers []string) error {
 	deadline := time.After(3 * time.Second)
 	respuestas := make(chan SnapshotEstado, len(peers))
@@ -40,31 +40,36 @@ func RecuperarEstado(estado *Estado, peers []string) error {
 	return aplicarMayoritaria(estado, snapshots)
 }
 
-// aplicarMayoritaria valida que mas de dos tercios compartan el mismo inventario.
+// aplicarMayoritaria valida que mas de dos tercios compartan el mismo inventario
+// y luego aplica quorum independiente sobre los vetos para garantizar convergencia
+// determinista en ambas dimensiones del estado.
 func aplicarMayoritaria(estado *Estado, snapshots []SnapshotEstado) error {
 	if len(snapshots) == 0 {
 		return fmt.Errorf("no se recibieron estados para recuperar")
 	}
 
-	conteo := make(map[string]int)
+	// --- Quorum de inventario ---
+	conteoInv := make(map[string]int)
 	representante := make(map[string]SnapshotEstado)
 
 	for _, snapshot := range snapshots {
 		clave := ClaveInventario(snapshot.Inventario)
-		conteo[clave]++
+		conteoInv[clave]++
 		representante[clave] = snapshot
-		log.Printf("Recuperacion: inventario candidato=%s conteo=%d", clave, conteo[clave])
+		log.Printf("Recuperacion: inventario candidato=%s conteo=%d", clave, conteoInv[clave])
 	}
 
 	var mejorClave string
 	var mejorCantidad int
-	for clave, cantidad := range conteo {
+	for clave, cantidad := range conteoInv {
 		if cantidad > mejorCantidad {
 			mejorClave = clave
 			mejorCantidad = cantidad
 		}
 	}
 
+	// Condicion correcta: necesitamos ESTRICTAMENTE mas de 2/3.
+	// "mejorCantidad > (2/3)*len(snapshots)"  equivale a  "mejorCantidad*3 > len(snapshots)*2"
 	if mejorCantidad*3 <= len(snapshots)*2 {
 		log.Printf("Recuperacion rechazada: mejor consenso %d/%d", mejorCantidad, len(snapshots))
 		return fmt.Errorf(
@@ -74,7 +79,46 @@ func aplicarMayoritaria(estado *Estado, snapshots []SnapshotEstado) error {
 		)
 	}
 
-	estado.AplicarSnapshot(representante[mejorClave])
-	log.Printf("Recuperacion aceptada: consenso %d/%d inventario=%s", mejorCantidad, len(snapshots), mejorClave)
+	// --- Quorum de vetos (independiente del inventario) ---
+	// Serializamos cada mapa de vetos como clave comparable.
+	conteoVetos := make(map[string]int)
+	representanteVetos := make(map[string]map[string]int)
+
+	for _, snapshot := range snapshots {
+		clave := ClaveVetos(snapshot.Vetos)
+		conteoVetos[clave]++
+		representanteVetos[clave] = snapshot.Vetos
+	}
+
+	var mejorClaveVetos string
+	var mejorCantidadVetos int
+	for clave, cantidad := range conteoVetos {
+		if cantidad > mejorCantidadVetos {
+			mejorClaveVetos = clave
+			mejorCantidadVetos = cantidad
+		}
+	}
+
+	// Si no hay quorum en vetos tampoco hay convergencia determinista.
+	// Usamos la misma regla estricta de 2/3.
+	if mejorCantidadVetos*3 <= len(snapshots)*2 {
+		log.Printf("Recuperacion rechazada por vetos: mejor consenso %d/%d", mejorCantidadVetos, len(snapshots))
+		return fmt.Errorf(
+			"no hay consenso de vetos: %d/%d respuestas iguales",
+			mejorCantidadVetos,
+			len(snapshots),
+		)
+	}
+
+	// Aplicar inventario con quorum + vetos con quorum
+	snapshotFinal := representante[mejorClave]
+	snapshotFinal.Vetos = representanteVetos[mejorClaveVetos]
+	estado.AplicarSnapshot(snapshotFinal)
+
+	log.Printf(
+		"Recuperacion aceptada: inventario consenso=%d/%d vetos consenso=%d/%d",
+		mejorCantidad, len(snapshots),
+		mejorCantidadVetos, len(snapshots),
+	)
 	return nil
 }
